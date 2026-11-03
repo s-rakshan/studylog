@@ -23,8 +23,8 @@ const ICON = {
 
 /* ---------------- data ---------------- */
 const DEF = { timerMin: 5, sound: 'chime', volume: 0.6, vibrate: true, autoMark: true, hideNums: false, timerBar: true,
-  snap: true, h24: false, dayStart: 4, goal: 1000, goalMode: 'all', offset: 0, remind: true, remindAt: '23:00' };
-const fresh = () => ({ v: SCHEMA, setup: false, settings: { ...DEF }, rows: [], timer: { state: 'idle', dur: 5 * 60000, endAt: 0, left: 0, doneAt: 0, mark: null }, lastBackup: 0, remindSkip: '' });
+  snap: true, h24: false, dayStart: 4, goal: 1000, goalMode: 'all', offset: 0, remind: false, remindAt: '12:00', remindMonthly: true };
+const fresh = () => ({ v: SCHEMA, setup: false, settings: { ...DEF }, rows: [], timer: { state: 'idle', dur: 5 * 60000, endAt: 0, left: 0, doneAt: 0, mark: null }, remindSkip: '' });
 const isKey = k => typeof k === 'string' && /^\d{4}-\d\d-\d\d$/.test(k);
 function normRow(r) {
   if (!r || !isKey(r.date) || !Number.isFinite(+r.start) || !Number.isFinite(+r.end)) return null;
@@ -36,6 +36,7 @@ function migrate(d) {
   const f = fresh(); if (!d || typeof d !== 'object') return f;
   // future schema changes go here: if (d.v < 2) { ... }
   const out = { ...f, ...d, v: SCHEMA, settings: { ...f.settings, ...(d.settings || {}) }, timer: { ...f.timer, ...(d.timer || {}) } };
+  if (!out.settings.remindMonthly) { out.settings.remindMonthly = true; out.settings.remindAt = '12:00'; out.remindSkip = ''; }
   out.rows = (Array.isArray(d.rows) ? d.rows : []).map(normRow).filter(Boolean);
   return out;
 }
@@ -383,47 +384,26 @@ function tick() {
 let ticks = 0;
 let lastToday = todayKey();
 
-/* ---------------- backup ---------------- */
+// monthly: from the 1st of each month at the set time, until last month is exported (or skipped)
+const lastMonth = () => { const n = new Date(), d = new Date(n.getFullYear(), n.getMonth() - 1, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+const exportMonth = k => exportDocx(k + '-01', k + '-31');
+function checkReminder() { $('#banner').hidden = true; return;
+  const b = $('#banner'), s = S(), now = new Date(), lm = lastMonth();
+  const [h, m] = s.remindAt.split(':').map(Number), at = new Date(now.getFullYear(), now.getMonth(), 1, h, m);
+  const due = s.remind && D.setup && D.rows.some(r => r.date.startsWith(lm)) && now >= at && D.remindSkip !== lm && D.lastExportM !== lm;
+  if (!due) { b.hidden = true; return; }
+  if (b.hidden) { b.innerHTML = ''; b.append(el('span', { class: 't' }, 'Export last month?'), el('button', { class: 'btn acc', id: 'exNow', style: 'flex:none;height:40px;padding:0 16px;font-size:15px', onclick: () => exportMonth(lm) }, 'Export'),
+      el('button', { class: 'ib', 'aria-label': 'Not this month', html: ICON.x, onclick: () => { D.remindSkip = lm; save(); b.hidden = true; } }));
+    b.hidden = false;
+    if (document.hidden && D.remindNotified !== lm) { D.remindNotified = lm; save(); notify(APP_NAME, 'Export last month\'s log. Open the app and tap Export.', { tag: 'export' }); } }
+}
+
 function download(blob, name) {
   const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
-function backup() {
-  const data = { app: 'studylog', schema: SCHEMA, exported: new Date().toISOString(), settings: D.settings, rows: D.rows };
-  download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), 'study-backup.json');
-  D.lastBackup = Date.now(); D.remindSkip = todayKey(); save(); $('#banner').hidden = true;
-  toast('Saved study-backup.json to Downloads');
-}
-function restore() {
-  const inp = el('input', { type: 'file', accept: '.json,application/json' });
-  inp.onchange = async () => {
-    const f = inp.files[0]; if (!f) return;
-    let j; try { j = JSON.parse(await f.text()); } catch { return toast('That file isn\'t a backup.'); }
-    if (!j || j.app !== 'studylog' || !Array.isArray(j.rows)) return toast('That file isn\'t a Study Log backup.');
-    if ((j.schema || 1) > SCHEMA) return toast('This backup is from a newer version. Update the app first.');
-    const rows = j.rows.map(normRow).filter(Boolean);
-    const how = await choose('Restore backup', `The backup has ${rows.length} hours (${fmtH(sum(rows).mins / 60)} h). You have ${D.rows.length} now.`,
-      [{ v: 'merge', label: 'Merge with what I have', cls: 'pri' }, { v: 'replace', label: 'Replace everything', cls: 'dng' }, { v: null, label: 'Cancel' }]);
-    if (!how) return;
-    if (how === 'replace') { D.rows = rows; if (j.settings) D.settings = { ...DEF, ...j.settings }; }
-    else { const by = new Map(D.rows.map(r => [r.id, r])); rows.forEach(r => { const o = by.get(r.id); if (!o || r.ts > o.ts) by.set(r.id, r); }); D.rows = [...by.values()]; }
-    D.setup = true; save(); $('#first')?.remove(); render(); toast(`Restored ${rows.length} hours`);
-  };
-  inp.click();
-}
-function checkReminder() {
-  const b = $('#banner'), s = S(), tk = todayKey();
-  const [h, m] = s.remindAt.split(':').map(Number), at = pkey(tk); at.setHours(h, m, 0, 0); if (h * 60 + m < ds()) at.setDate(at.getDate() + 1);
-  const due = s.remind && D.setup && D.rows.length && Date.now() >= at && D.remindSkip !== tk && !(D.lastBackup && pos(D.lastBackup).k === tk);
-  if (!due) { b.hidden = true; return; }
-  if (b.hidden) { b.innerHTML = ''; b.append(el('span', { class: 't' }, 'Back up today\'s log?'), el('button', { class: 'btn acc', id: 'bkNow', style: 'flex:none;height:40px;padding:0 16px;font-size:15px', onclick: backup }, 'Save backup'),
-      el('button', { class: 'ib', 'aria-label': 'Not today', html: ICON.x, onclick: () => { D.remindSkip = tk; save(); b.hidden = true; } }));
-    b.hidden = false;
-    if (document.hidden && D.remindNotified !== tk) { D.remindNotified = tk; save(); notify(APP_NAME, 'Back up today\'s log? Open the app and tap Save backup.', { tag: 'backup' }); } }
-}
-
 /* ---------------- export .docx ---------------- */
-function exportDocx(from, to) {
+function exportDocx(from, to, share) {
   const keys = [...new Set(D.rows.filter(r => (!from || r.date >= from) && (!to || r.date <= to)).map(r => r.date))].sort();
   if (!keys.length) return toast('Nothing logged in that range.');
   const all = { mins: 0, foc: 0 };
@@ -436,8 +416,15 @@ function exportDocx(from, to) {
     head: ['Start', 'End', 'What I did', 'Focus'], days,
     summary: [`This export: ${fmtD(all.mins)} logged, ${fmtD(all.foc)} focused (${all.mins ? Math.round(all.foc / all.mins * 100) : 0}%) over ${keys.length} ${keys.length === 1 ? 'day' : 'days'}.`,
       `Goal: ${fmtH(done)} / ${fmtH(g)} h${S().goalMode === 'useful' ? ' (focus time)' : ''}, ${fmtH(Math.max(0, g - done))} h left${+S().offset ? ` (includes ${fmtH(+S().offset)} h done before the app)` : ''}.`] });
-  const name = `study-log-${keys[0]}${keys.length > 1 ? '_to_' + keys[keys.length - 1] : ''}.docx`;
-  download(blob, name); toast('Saved ' + name);
+  const isMonth = from && to && from.endsWith('-01') && to.endsWith('-31') && from.slice(0, 7) === to.slice(0, 7);
+  if (isMonth) { D.lastExportM = from.slice(0, 7); save(); $('#banner').hidden = true; }
+  const name = isMonth ? `study-log-${from.slice(0, 7)}.docx` : `study-log-${keys[0]}${keys.length > 1 ? '_to_' + keys[keys.length - 1] : ''}.docx`;
+  if (share) {
+    const f = new File([blob], name, { type: blob.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    if (navigator.canShare?.({ files: [f] })) { navigator.share({ files: [f], title: name }).catch(() => {}); return blob; }
+    toast('Sharing isn\'t available here, so it was saved instead.');
+  }
+  download(blob, name); if (!share) toast('Saved ' + name + ' to Downloads');
   return blob;
 }
 
@@ -460,13 +447,18 @@ function settingsSheet() {
       el('button', { class: s.goalMode === v ? 'on' : '', 'data-gm': v, onclick: e => { set('goalMode', v); gm.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === e.currentTarget)); } }, l)));
     const dsM = Math.round(s.dayStart * 60), p2 = n => String(n).padStart(2, '0');
     const dsSel = el('input', { class: 'tin', type: 'time', value: `${p2(Math.floor(dsM / 60))}:${p2(dsM % 60)}`, 'data-s': 'dayStart', onchange: e => { if (!e.target.value) return; const [h, m] = e.target.value.split(':').map(Number); const old = s.dayStart; set('dayStart', h + m / 60); reDay(old); view = todayKey(); } });
-    const remT = el('input', { class: 'tin', type: 'time', value: s.remindAt, 'data-s': 'remindAt', onchange: e => { set('remindAt', e.target.value || '23:00'); D.remindSkip = ''; save(); } });
+    const remT = el('input', { class: 'tin', type: 'time', value: s.remindAt, 'data-s': 'remindAt', onchange: e => { set('remindAt', e.target.value || '12:00'); } });
     const tk = todayKey();
     const exFrom = el('input', { class: 'tin', type: 'date', value: addDays(tk, -6), id: 'exFrom', style: 'flex:1' }), exTo = el('input', { class: 'tin', type: 'date', value: tk, id: 'exTo', style: 'flex:1' });
     const rangeBox = el('div', { class: 'row2', hidden: true }, exFrom, exTo);
-    let exMode = 'day';
-    const exSeg = el('div', { class: 'seg sm' }, [['day', 'This day'], ['range', 'Dates'], ['all', 'All']].map(([v, l]) =>
-      el('button', { class: v === exMode ? 'on' : '', 'data-ex': v, onclick: e => { exMode = v; rangeBox.hidden = v !== 'range'; exSeg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === e.currentTarget)); } }, l)));
+    let exMode = 'month';
+    const exArgs = () => exMode === 'month' ? [exMon.value + '-01', exMon.value + '-31'] : exMode === 'range' ? [exFrom.value, exTo.value] : [undefined, undefined];
+    const lastM = lastMonth();
+    const months = [...new Set([...D.rows.map(r => r.date.slice(0, 7)), lastM])].sort().reverse();
+    const mName = k => new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    const exMon = el('select', { class: 'sel', id: 'exMon', style: 'flex:1' }, months.map(k => el('option', { value: k, selected: k === lastM }, mName(k)))), monBox = el('div', { class: 'row2' }, exMon);
+    const exSeg = el('div', { class: 'seg sm' }, [['month', 'Month'], ['range', 'Dates'], ['all', 'All']].map(([v, l]) =>
+      el('button', { class: v === exMode ? 'on' : '', 'data-ex': v, onclick: e => { exMode = v; rangeBox.hidden = v !== 'range'; monBox.hidden = v !== 'month'; exSeg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === e.currentTarget)); } }, l)));
     const perm = 'Notification' in window ? Notification.permission : 'unsupported';
     const nb = perm === 'granted' ? el('span', { class: 'note', style: 'margin:0' }, 'On') : perm === 'denied' ? el('span', { class: 'note', style: 'margin:0' }, 'Blocked') :
       el('button', { class: 'btn', style: 'flex:none;height:40px;padding:0 14px;font-size:14px', onclick: async () => { await askNotif(); closeSheet(true); settingsSheet(); } }, 'Allow');
@@ -488,16 +480,12 @@ function settingsSheet() {
         it('Goal', 'hours', goalIn),
         it('Already done', 'Hours you did before using this app', offIn),
         it('Count toward the goal', null, gm, 'col')),
-      grp('Backup',
-        it('Daily backup reminder', null, sw('remind')),
-        it('Remind at', null, remT),
-        el('div', { class: 'it col' }, el('div', { class: 'l' }, el('div', { id: 'lastBk' }, 'Last backed up: ' + (D.lastBackup ? new Date(D.lastBackup).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'never')),
-          el('small', {}, 'Saves one file, study-backup.json, to Downloads. Keep only the newest one.')),
-          el('div', { class: 'row2' }, el('button', { class: 'btn acc', id: 'bkBtn', onclick: () => { backup(); $('#lastBk').textContent = 'Last backed up: just now'; } }, 'Back up now'), el('button', { class: 'btn', id: 'rsBtn', onclick: restore }, 'Restore')))),
       grp('Export to Word',
-        el('div', { class: 'it col' }, exSeg, rangeBox,
-          el('button', { class: 'btn pri', id: 'exBtn', style: 'margin-top:8px', onclick: () => exportDocx(...(exMode === 'day' ? [view, view] : exMode === 'range' ? [exFrom.value, exTo.value] : [])) }, 'Export .docx'))),
-      el('p', { class: 'note' }, `${APP_NAME} ${VERSION}. Your log is stored only on this phone. Clearing Chrome's site data deletes it, so keep a backup.`));
+        el('div', { class: 'it col' }, exSeg, monBox, rangeBox,
+          el('div', { class: 'row2', style: 'margin-top:8px' },
+            el('button', { class: 'btn pri', id: 'exBtn', onclick: () => exportDocx(...exArgs()) }, 'Save'),
+            el('button', { class: 'btn', id: 'shBtn', onclick: () => exportDocx(...exArgs(), true) }, 'Share')))),
+      el('p', { class: 'note' }, `${APP_NAME} ${VERSION}. Your log is stored only on this phone. Clearing Chrome's site data deletes it, so export each month.`));
   }, 'full');
 }
 // when "new day starts at" changes, move rows to the study day their start time now belongs to
@@ -555,8 +543,7 @@ function firstRun() {
     el('div', { class: 'fld' }, el('label', { for: 'frGoal' }, 'Your goal (hours)'), g),
     el('div', { class: 'fld' }, el('label', { for: 'frDone' }, 'Hours already done before today'), o),
     el('div', { class: 'btns', style: 'margin-top:28px' }, el('button', { class: 'btn pri', id: 'frStart', onclick: () => {
-      S().goal = Math.max(1, Math.round(+g.value) || 1000); S().offset = Math.max(0, +o.value || 0); D.setup = true; save(); wrap.remove(); render(); } }, 'Start')),
-    el('button', { class: 'link', id: 'frRestore', onclick: restore }, 'New phone? Restore from a backup'));
+      S().goal = Math.max(1, Math.round(+g.value) || 1000); S().offset = Math.max(0, +o.value || 0); D.setup = true; save(); wrap.remove(); render(); } }, 'Start')));
   document.body.append(wrap);
 }
 
