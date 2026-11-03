@@ -304,7 +304,7 @@ function tStart() {
 }
 function tPause() { const t = T(); t.left = leftMs(); t.state = 'paused'; clearTimeout(endT); cancelNotif('timer'); save(); paintTimer(true); }
 function tReset() { const t = T(); t.state = 'idle'; t.mark = null; clearTimeout(endT); cancelNotif('timer'); save(); paintTimer(true); }
-function tAgain() { T().state = 'idle'; tStart(); }
+function tAgain(at) { T().state = 'idle'; tStart(); const t = T(); if (at && at < Date.now() && Date.now() - at < t.dur) { t.endAt = at + t.dur; save(); schedule(); paintTimer(true); } }
 function tAdjust(dir) {
   const L = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 45, 50, 60, 90], m = T().dur / 60000;
   let i = L.findIndex(x => x >= m); if (i < 0) i = L.length - 1; if (L[i] !== m && dir < 0) i++;
@@ -359,7 +359,7 @@ function paintTimer(force) {
     return;
   }
   const face = () => s.hideNums && st !== 'idle'
-    ? (s.timerBar ? ring(frac) : el('span', { class: 'dot' }))
+    ? el('span', { class: 'dot' })
     : el('span', { class: 'tnum', id: 'tLeft' }, fmtMs(leftMs()));
   if (st === 'idle') {
     box.append(el('button', { class: 'tx', id: 'tMinus', 'aria-label': 'Shorter', onclick: () => tAdjust(-1) }, '−'),
@@ -369,7 +369,6 @@ function paintTimer(force) {
     box.append(el('button', { class: 'tg', id: 'tMain', 'aria-label': st === 'running' ? 'Pause' : 'Resume', onclick: st === 'running' ? tPause : tStart },
       el('span', { html: st === 'running' ? ICON.pause : ICON.play }), face()),
       el('button', { class: 'tx', id: 'tReset', 'aria-label': 'Reset timer', html: ICON.again, onclick: tReset }));
-    if (s.timerBar && !s.hideNums) box.append(el('i', { class: 'tb2', style: `width:${frac * 100}%` }));
   }
 }
 function ring(f) {
@@ -459,8 +458,8 @@ function settingsSheet() {
     const offIn = el('input', { class: 'num', type: 'number', inputmode: 'decimal', min: 0, step: 0.5, value: s.offset, 'data-s': 'offset', onchange: e => set('offset', Math.max(0, +e.target.value || 0)) });
     const gm = el('div', { class: 'seg sm', style: 'margin-top:8px' }, [['all', 'All logged time'], ['useful', 'Focus time only']].map(([v, l]) =>
       el('button', { class: s.goalMode === v ? 'on' : '', 'data-gm': v, onclick: e => { set('goalMode', v); gm.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === e.currentTarget)); } }, l)));
-    const dsSel = el('select', { class: 'sel', 'data-s': 'dayStart', onchange: e => { const old = s.dayStart; set('dayStart', +e.target.value); reDay(old); view = todayKey(); } },
-      [0, 1, 2, 3, 4, 5].map(h => el('option', { value: h, selected: h === s.dayStart }, h ? `${h}:00 AM` : 'Midnight')));
+    const dsM = Math.round(s.dayStart * 60), p2 = n => String(n).padStart(2, '0');
+    const dsSel = el('input', { class: 'tin', type: 'time', value: `${p2(Math.floor(dsM / 60))}:${p2(dsM % 60)}`, 'data-s': 'dayStart', onchange: e => { if (!e.target.value) return; const [h, m] = e.target.value.split(':').map(Number); const old = s.dayStart; set('dayStart', h + m / 60); reDay(old); view = todayKey(); } });
     const remT = el('input', { class: 'tin', type: 'time', value: s.remindAt, 'data-s': 'remindAt', onchange: e => { set('remindAt', e.target.value || '23:00'); D.remindSkip = ''; save(); } });
     const tk = todayKey();
     const exFrom = el('input', { class: 'tin', type: 'date', value: addDays(tk, -6), id: 'exFrom', style: 'flex:1' }), exTo = el('input', { class: 'tin', type: 'date', value: tk, id: 'exTo', style: 'flex:1' });
@@ -480,12 +479,11 @@ function settingsSheet() {
         it('Volume', null, el('div', { style: 'width:130px' }, vol)),
         it('Vibrate once', null, sw('vibrate')),
         it('Hide the numbers', 'Show only a ring or dot while it runs', sw('hideNums')),
-        it('Progress bar', null, sw('timerBar')),
         it('Notifications', perm === 'denied' ? 'Allow them in Chrome site settings to get a ping when the phone is locked' : 'So the ping reaches you when the phone is locked', nb)),
       grp('Hours',
         it('24-hour clock', null, sw('h24')),
         it('Snap to 5 minutes', 'Times move in 5-minute steps', sw('snap')),
-        it('New day starts at', 'Study after midnight counts for the day before', dsSel)),
+        it('New day starts at', 'Study before this time counts for the day before', dsSel)),
       grp('Goal',
         it('Goal', 'hours', goalIn),
         it('Already done', 'Hours you did before using this app', offIn),
@@ -578,7 +576,7 @@ $('#statsBtn').onclick = statsSheet;
   m.addEventListener('touchend', e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; if (Math.abs(dx) > 80 && Math.abs(dy) < 40) { view = addDays(view, dx < 0 ? 1 : -1); render(); } }, { passive: true });
 })();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { check(); render(); } });
-navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'again') tAgain(); });
+navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'again' && T().state === 'done') tAgain(e.data.at); });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // if the timer was running when the app was closed, pick it back up

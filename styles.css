@@ -81,7 +81,8 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .add:active{transform:scale(.97)}
 .timer{flex:1;min-width:0;height:56px;border-radius:18px;background:var(--s1);border:1px solid var(--line2);display:flex;align-items:center;position:relative;overflow:hidden}
 .timer .tg{flex:1;height:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-size:22px;font-weight:650;min-width:0}
-.timer .tg svg{width:20px;height:20px}
+.timer .tg svg{width:20px;height:20px;display:block}
+.timer .tg>span{display:flex;align-items:center;line-height:1}
 .timer .tx{width:48px;height:100%;display:grid;place-items:center;color:var(--fg2);font-size:22px}
 .timer .tx:active,.timer .tg:active{background:var(--s2)}
 .timer .tb2{position:absolute;left:0;bottom:0;height:3px;background:var(--ac);transition:width .25s linear}

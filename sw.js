@@ -1,5 +1,5 @@
 /* Study Log service worker: whole app offline (cache first, refreshed in the background), timer notification taps. */
-const V = 'studylog-v4';
+const V = 'studylog-v5';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'docx.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' }))))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -16,7 +16,8 @@ self.addEventListener('notificationclick', e => {
   const again = e.action === 'again'; e.notification.close();
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
     const c = cs[0];
-    if (c) { if (again) c.postMessage({ type: 'again' }); return c.focus(); }
+    // "Again" restarts quietly (no unlock needed while the page is alive); a plain tap opens the app
+    if (c) { if (again) { c.postMessage({ type: 'again', at: Date.now() }); return; } return c.focus(); }
     return self.clients.openWindow(again ? './?again=1' : './');
   }));
 });
