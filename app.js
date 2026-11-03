@@ -1,7 +1,7 @@
 /* Study Log: hours, focus blocks (5 min each) and a goal. Everything stays on this phone (localStorage). */
 'use strict';
 const APP_NAME = 'Study Log';          // the one place to rename the app (also update manifest.webmanifest)
-const KEY = 'studylog.v1', SCHEMA = 1, VERSION = '1.0';
+const KEY = 'studylog.v1', SCHEMA = 1, VERSION = '1.10';
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -422,7 +422,8 @@ function exportDocx(from, to, share) {
   const name = isMonth ? `study-log-${from.slice(0, 7)}.docx` : `study-log-${keys[0]}${keys.length > 1 ? '_to_' + keys[keys.length - 1] : ''}.docx`;
   if (share) {   // Chrome on Android can't share .docx, so Share sends a PDF copy
     const pdf = makePdf(model), pn = name.replace(/\.docx$/, '.pdf'), f = new File([pdf], pn, { type: 'application/pdf' });
-    if (navigator.canShare?.({ files: [f] })) { navigator.share({ files: [f], title: pn }).catch(e => { if (e?.name !== 'AbortError') { download(pdf, pn); toast('Couldn\'t share, so saved ' + pn + ' to Downloads'); } }); return pdf; }
+    let ok = false; try { ok = !!navigator.canShare?.({ files: [f] }); } catch {}
+    if (ok) { navigator.share({ files: [f] }).catch(e => { if (e?.name !== 'AbortError') { download(pdf, pn); toast(`Couldn't share (${e?.name || 'error'}), so saved ${pn} to Downloads`); } }); return pdf; }
     download(pdf, pn); toast('Sharing isn\'t available here, so saved ' + pn + ' to Downloads'); return pdf;
   }
   const blob = makeDocx(model);
@@ -486,7 +487,7 @@ function settingsSheet() {
         el('div', { class: 'it col' }, exSeg, monBox, rangeBox,
           el('div', { class: 'row2', style: 'margin-top:8px' },
             el('button', { class: 'btn pri', id: 'exBtn', onclick: () => exportDocx(...exArgs()) }, 'Save'),
-            el('button', { class: 'btn', id: 'shBtn', onclick: () => exportDocx(...exArgs(), true) }, 'Share')))),
+            el('button', { class: 'btn', id: 'shBtn', onclick: () => { try { exportDocx(...exArgs(), true); } catch (e) { toast('Share failed: ' + (e?.message || e)); } } }, 'Share')))),
       el('p', { class: 'note' }, `${APP_NAME} ${VERSION}. Your log is stored only on this phone. Clearing Chrome's site data deletes it, so export each month.`));
   }, 'full');
 }
@@ -566,7 +567,12 @@ $('#statsBtn').onclick = statsSheet;
 })();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { check(); render(); } });
 navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'again' && T().state === 'done') tAgain(e.data.at); });
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const hadSW = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.register('sw.js').then(r => document.addEventListener('visibilitychange', () => { if (!document.hidden) r.update().catch(() => {}); })).catch(() => {});
+  // a new version took over: reload once so the update shows straight away (not while the timer is running)
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW && !reloaded && T().state !== 'running') { reloaded = true; location.reload(); } });
+}
 
 // if the timer was running when the app was closed, pick it back up
 if (T().state === 'running') schedule();
