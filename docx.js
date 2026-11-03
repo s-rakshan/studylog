@@ -32,7 +32,7 @@
     return String(t ?? '').split('\n').map((ln, i) => (i ? '<w:r><w:br/></w:r>' : '') + `<w:r>${rp ? `<w:rPr>${rp}</w:rPr>` : ''}<w:t xml:space="preserve">${x(ln)}</w:t></w:r>`).join('');
   };
   const para = (t, o = {}) => `<w:p><w:pPr>${o.keep ? '<w:keepNext/>' : ''}<w:spacing w:before="${o.before || 0}" w:after="${o.after ?? 80}"/>${o.align ? `<w:jc w:val="${o.align}"/>` : ''}</w:pPr>${run(t, o)}</w:p>`;
-  const W = [1250, 1250, 5438, 1700]; // twips, A4 with 2 cm margins = 9638
+  const W = [1250, 1150, 1250, 4288, 1700]; // twips, A4 with 2 cm margins = 9638
   const cell = (t, i, o = {}) => `<w:tc><w:tcPr><w:tcW w:w="${W[i]}" w:type="dxa"/>${o.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${o.fill}"/>` : ''}</w:tcPr><w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>${run(t, o)}</w:p></w:tc>`;
   const trow = (cells, o = {}) => `<w:tr><w:trPr><w:cantSplit/>${o.head ? '<w:tblHeader/>' : ''}</w:trPr>${cells.map((c, i) => cell(c, i, o)).join('')}</w:tr>`;
   const table = (head, rows, total) => {
@@ -41,7 +41,7 @@
       + trow(head, { head: 1, b: 1, fill: 'F2F2F2' }) + rows.map(r => trow(r)).join('') + (total ? trow(total, { b: 1, fill: 'FAFAFA' }) : '') + '</w:tbl>';
   };
 
-  /* model: { title, subtitle, head:[4], days:[{ title, rows:[[4]], total:[4] }], summary:[lines] } */
+  /* model: { title, subtitle, head:[5], days:[{ title, rows:[[5]], total:[5] }], summary:[lines] } */
   window.makeDocx = function (m) {
     let body = para(m.title, { b: 1, sz: 36, after: 40 }) + para(m.subtitle, { color: '666666', after: 240 });
     m.days.forEach(d => { body += para(d.title, { b: 1, sz: 26, before: 200, after: 80, keep: 1 }) + table(m.head, d.rows, d.total) + para('', { after: 0 }); });

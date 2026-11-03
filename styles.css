@@ -161,7 +161,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .step span{min-width:56px;text-align:center;font-weight:650}
 .num{width:96px;height:44px;border-radius:12px;background:var(--s3);border:0;text-align:center;font-size:17px;font-weight:600;outline:0}
 .tin{height:44px;border-radius:12px;background:var(--s3);border:0;padding:0 10px;font-size:16px;color-scheme:dark;outline:0}
-.sel{height:44px;border-radius:12px;background:var(--s3);border:0;padding:0 10px;font-size:16px;outline:0}
+.sel{height:44px;border-radius:12px;background:var(--s3) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d8d8dc' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 16px center/16px;border:0;padding:0 44px 0 14px;font-size:16px;outline:0;-webkit-appearance:none;appearance:none}
 input[type=range]{width:100%;accent-color:var(--ac);height:32px}
 .row2{display:flex;gap:8px;margin-top:8px}
 .row2 .btn{height:48px;font-size:15px}

@@ -406,25 +406,27 @@ function download(blob, name) {
 function exportDocx(from, to, share) {
   const keys = [...new Set(D.rows.filter(r => (!from || r.date >= from) && (!to || r.date <= to)).map(r => r.date))].sort();
   if (!keys.length) return toast('Nothing logged in that range.');
-  const all = { mins: 0, foc: 0 };
+  const all = { mins: 0, foc: 0 }, useful = S().goalMode === 'useful', run = new Map(); let cum = +S().offset || 0;
+  [...D.rows].sort((x, y) => x.date < y.date ? -1 : x.date > y.date ? 1 : x.start - y.start).forEach(r => { cum += (useful ? focusOf(r) : r.end - r.start) / 60; run.set(r.id, cum); });
   const days = keys.map(k => { const L = rowsOf(k), t = sum(L); all.mins += t.mins; all.foc += t.foc;
     return { title: `${dayLabel(k, true)}  ·  ${fmtD(t.mins)} logged · ${fmtD(t.foc)} focus`,
-      rows: L.map(r => [fmtT(r.start), fmtT(r.end) + (r.end >= 1440 && r.start < 1440 ? ' (+1)' : ''), r.text || '—', `${Math.min(r.blocks, maxB(r))}/${maxB(r)} · ${focusOf(r)} min`]),
-      total: ['Total', '', `${L.length} ${L.length === 1 ? 'row' : 'rows'} · ${fmtD(t.mins)}`, fmtD(t.foc)] }; });
+      rows: L.map((r, i) => [`#${fmtH(run.get(r.id))} · ${i + 1}`, fmtT(r.start), fmtT(r.end) + (r.end >= 1440 && r.start < 1440 ? ' (+1)' : ''), r.text || '—', `${Math.min(r.blocks, maxB(r))}/${maxB(r)} · ${focusOf(r)} min`]),
+      total: ['Total', '', '', `${L.length} ${L.length === 1 ? 'row' : 'rows'} · ${fmtD(t.mins)}`, fmtD(t.foc)] }; });
   const g = +S().goal || 1000, done = Math.round(goalHours() * 10) / 10;
-  const blob = makeDocx({ title: APP_NAME, subtitle: `${dayLabel(keys[0], true)} – ${dayLabel(keys[keys.length - 1], true)}  ·  exported ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`,
-    head: ['Start', 'End', 'What I did', 'Focus'], days,
+  const model = ({ title: APP_NAME, subtitle: `${dayLabel(keys[0], true)} – ${dayLabel(keys[keys.length - 1], true)}  ·  exported ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`,
+    head: ['# · Day', 'Start', 'End', 'What I did', 'Focus'], days,
     summary: [`This export: ${fmtD(all.mins)} logged, ${fmtD(all.foc)} focused (${all.mins ? Math.round(all.foc / all.mins * 100) : 0}%) over ${keys.length} ${keys.length === 1 ? 'day' : 'days'}.`,
       `Goal: ${fmtH(done)} / ${fmtH(g)} h${S().goalMode === 'useful' ? ' (focus time)' : ''}, ${fmtH(Math.max(0, g - done))} h left${+S().offset ? ` (includes ${fmtH(+S().offset)} h done before the app)` : ''}.`] });
   const isMonth = from && to && from.endsWith('-01') && to.endsWith('-31') && from.slice(0, 7) === to.slice(0, 7);
   if (isMonth) { D.lastExportM = from.slice(0, 7); save(); $('#banner').hidden = true; }
   const name = isMonth ? `study-log-${from.slice(0, 7)}.docx` : `study-log-${keys[0]}${keys.length > 1 ? '_to_' + keys[keys.length - 1] : ''}.docx`;
-  if (share) {
-    const f = new File([blob], name, { type: blob.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    if (navigator.canShare?.({ files: [f] })) { navigator.share({ files: [f], title: name }).catch(() => {}); return blob; }
-    toast('Sharing isn\'t available here, so it was saved instead.');
+  if (share) {   // Chrome on Android can't share .docx, so Share sends a PDF copy
+    const pdf = makePdf(model), pn = name.replace(/\.docx$/, '.pdf'), f = new File([pdf], pn, { type: 'application/pdf' });
+    if (navigator.canShare?.({ files: [f] })) { navigator.share({ files: [f], title: pn }).catch(e => { if (e?.name !== 'AbortError') { download(pdf, pn); toast('Couldn\'t share, so saved ' + pn + ' to Downloads'); } }); return pdf; }
+    download(pdf, pn); toast('Sharing isn\'t available here, so saved ' + pn + ' to Downloads'); return pdf;
   }
-  download(blob, name); if (!share) toast('Saved ' + name + ' to Downloads');
+  const blob = makeDocx(model);
+  download(blob, name); toast('Saved ' + name + ' to Downloads');
   return blob;
 }
 
