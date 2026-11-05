@@ -1,7 +1,7 @@
 :root{
   --bg:#121212; --s1:#1b1b1d; --s2:#232326; --s3:#2c2c30; --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
   --fg:#f4f4f5; --fg2:#a8a8b0; --fg3:#6e6e78;
-  --ac:#f2b48c; --ac-dim:rgba(242,180,140,.16); --ac-ink:#1a120d;
+  --ac:#f5a57a; --acr:245,165,122; --ac-dim:rgba(var(--acr),.16); --ac-ink:#1a120d;
   --warn:#f0c36a; --bad:#ff7a7a;
   --r:16px; --font:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans',sans-serif;
   --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
@@ -47,7 +47,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .list{padding-top:10px}
 .empty{margin-top:28px;text-align:center;color:var(--fg3);font-size:15px;line-height:1.5;padding:0 20px}
 .row{background:var(--s1);border:1px solid var(--line);border-radius:var(--r);padding:6px 6px 10px 8px;margin-top:10px;transition:border-color .3s}
-.row.now{border-color:rgba(242,180,140,.45)}
+.row.now{border-color:rgba(var(--acr),.45)}
 .row.flash{border-color:var(--ac)}
 .r1{display:flex;align-items:center;gap:0}
 .tb{display:flex;align-items:center;gap:2px;font-size:16px;font-weight:600}
@@ -87,7 +87,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .timer .tx{width:48px;height:100%;display:grid;place-items:center;color:var(--fg2);font-size:22px}
 .timer .tx:active,.timer .tg:active{background:var(--s2)}
 .timer .tb2{position:absolute;left:0;bottom:0;height:3px;background:var(--ac);transition:width .25s linear}
-.timer.run{border-color:rgba(242,180,140,.5)}
+.timer.run{border-color:rgba(var(--acr),.5)}
 .timer.pause .tg{color:var(--fg2)}
 .dot{width:14px;height:14px;border-radius:50%;background:var(--ac);animation:pulse 2s ease-in-out infinite}
 .timer.pause .dot{animation:none;background:var(--fg3)}
@@ -215,3 +215,6 @@ input[type=range]{width:100%;accent-color:var(--ac);height:32px}
 .stab.add:active{color:var(--ac)}
 .fldin{width:100%;height:52px;border-radius:14px;background:var(--s2);border:1px solid var(--line2);font-size:17px;font-weight:600;padding:0 14px;outline:0}
 .fldin:focus{border-color:var(--ac)}
+.themes{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:14px 16px;justify-items:center}
+.tdot{width:38px;height:38px;border-radius:50%;background:var(--c);box-shadow:0 0 0 2px var(--s1);position:relative}
+.tdot.on{box-shadow:0 0 0 3px var(--s1),0 0 0 5px var(--c)}

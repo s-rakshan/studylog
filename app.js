@@ -1,7 +1,7 @@
 /* Study Log: hours, focus blocks (5 min each) and a goal. Everything stays on this phone (localStorage). */
 'use strict';
 const APP_NAME = 'Study Log';          // the one place to rename the app (also update manifest.webmanifest)
-const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.12';
+const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13';
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -58,7 +58,7 @@ function migrate(d) {
       settings: d.settings, rows: d.rows, timer: d.timer,
       remindSkip: d.remindSkip || '', lastExportM: d.lastExportM || '', remindNotified: d.remindNotified || '', pend: d.pend || null,
     }, 'Physics');
-    return { v: SCHEMA, activeId: sub.id, subjects: [sub] };
+    return { v: SCHEMA, activeId: sub.id, subjects: [sub], theme: 'peach' };
   }
   const subjects = d.subjects.map((s, i) => normSubject(s, i === 0 ? 'Physics' : 'Subject'));
   if (!subjects.length) return freshStore();
@@ -66,11 +66,12 @@ function migrate(d) {
   if (!subjects.some(s => s.id === activeId && !s.archived)) {
     activeId = (subjects.find(s => !s.archived) || subjects[0]).id;
   }
-  return { v: SCHEMA, activeId, subjects };
+  return { v: SCHEMA, activeId, subjects, theme: THEMES.some(t => t[0] === d.theme) ? d.theme : 'peach' };
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 let _raw = null, STORE;
 try { _raw = JSON.parse(localStorage.getItem(KEY)); STORE = migrate(_raw); } catch { STORE = freshStore(); }
+applyTheme(STORE.theme);
 let D = STORE.subjects.find(s => s.id === STORE.activeId) || STORE.subjects[0];
 const S = () => D.settings;
 const subjectName = () => D?.name || 'Subject';
@@ -513,7 +514,7 @@ function paintTimer(force) {
 }
 function ring(f) {
   const C = 2 * Math.PI * 10;
-  return el('span', { html: `<svg class="ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" stroke="#3a3a40"/><circle cx="13" cy="13" r="10" stroke="#f2b48c" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - f)}" transform="rotate(-90 13 13)" stroke-linecap="round"/></svg>` });
+  return el('span', { html: `<svg class="ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" stroke="#3a3a40"/><circle cx="13" cy="13" r="10" style="stroke:var(--ac)" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - f)}" transform="rotate(-90 13 13)" stroke-linecap="round"/></svg>` });
 }
 function tick() {
   check(); if (T().state === 'running') paintTimer();
@@ -614,12 +615,13 @@ function settingsSheet() {
         const ok = await choose('Restore backup?', 'This replaces everything currently in the app, all subjects included.', [
           { label: 'Restore', v: true, cls: 'dng' }, { label: 'Cancel', v: false }]);
         if (!ok) return;
-        STORE = data; save(); location.reload();
+        STORE = data; save(); applyTheme(STORE.theme); location.reload();
       } catch { toast('Could not read that file.'); }
       e.target.value = '';
     } });
     sh.append(
       el('div', { class: 'sh-h' }, el('button', { class: 'ib', 'aria-label': 'Back', html: ICON.back, onclick: () => closeSheet() }), el('h2', {}, 'Settings')),
+      grp('Theme', themePicker(STORE.theme || 'peach', id => { STORE.theme = id; save(); })),
       grp('Timer',
         it('Default length', null, stepper),
         it('Auto-mark focus', 'When a timer ends, add one focus block to the current hour', sw('autoMark')),

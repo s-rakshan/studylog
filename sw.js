@@ -1,6 +1,6 @@
 /* Study Log service worker: whole app offline (cache first, refreshed in the background), timer notification taps. */
-const V = 'studylog-v12';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'docx.js', 'pdf.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
+const V = 'studylog-v13';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'theme.js', 'docx.js', 'pdf.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' }))))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
