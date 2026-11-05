@@ -230,3 +230,11 @@ input[type=range]{width:100%;accent-color:var(--ac);height:32px}
 /* no text selection on long-press (inputs stay editable) */
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,select,[contenteditable],[contenteditable] *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+/* keyboard Done bar (sits just above the on-screen keyboard while typing) */
+.kbbar{position:fixed;left:0;right:0;bottom:0;z-index:25;height:44px;display:flex;align-items:center;gap:8px;padding:0 6px 0 16px;background:var(--s2);border-top:1px solid var(--line2)}
+.kbbar[hidden]{display:none}
+.kbl{flex:1;min-width:0;color:var(--fg3);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kbdone{flex:none;height:36px;padding:0 14px;border-radius:10px;color:var(--ac);font-size:16px;font-weight:700}
+.kbdone:active{background:var(--ac-dim)}
+body.kbon .dock{visibility:hidden}
+body.kbon .sheet{padding-bottom:calc(60px + var(--sab))}
