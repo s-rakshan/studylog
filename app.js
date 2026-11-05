@@ -1,7 +1,7 @@
 /* Study Log: hours, focus blocks (5 min each) and a goal. Everything stays on this phone (localStorage). */
 'use strict';
 const APP_NAME = 'Study Log';          // the one place to rename the app (also update manifest.webmanifest)
-const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13.2';
+const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13.3';
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
