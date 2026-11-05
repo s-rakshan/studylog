@@ -1,7 +1,7 @@
 /* Study Log: hours, focus blocks (5 min each) and a goal. Everything stays on this phone (localStorage). */
 'use strict';
 const APP_NAME = 'Study Log';          // the one place to rename the app (also update manifest.webmanifest)
-const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13';
+const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13.1';
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -243,8 +243,10 @@ function choose(title, msg, buttons) {
   return new Promise(res => {
     openSheet((sh, st) => {
       st.onClose = () => res(null);
-      sh.append(head(title), msg ? el('p', { class: 'note', style: 'margin-top:0;font-size:15px;color:var(--fg2)' }, msg) : null,
-        el('div', { class: 'btns', style: buttons.length > 2 ? 'flex-direction:column' : '' }, buttons.map(b => el('button', { class: 'btn ' + (b.cls || ''), onclick: () => { st.onClose = null; closeSheet(); res(b.v); } }, b.label))));
+      sh.append(head(title));
+      if (msg) sh.append(el('p', { class: 'note', style: 'margin-top:0;font-size:15px;color:var(--fg2)' }, msg));
+      sh.append(
+        el('div', { class: 'btns' + (buttons.length > 2 ? ' list' : '') }, buttons.map(b => el('button', { class: 'btn ' + (b.cls || '') + (b.label === 'Cancel' ? ' cxl' : ''), onclick: () => { st.onClose = null; closeSheet(); res(b.v); } }, b.label))));
     });
   });
 }

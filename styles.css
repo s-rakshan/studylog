@@ -218,3 +218,13 @@ input[type=range]{width:100%;accent-color:var(--ac);height:32px}
 .themes{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:14px 16px;justify-items:center}
 .tdot{width:38px;height:38px;border-radius:50%;background:var(--c);box-shadow:0 0 0 2px var(--s1);position:relative}
 .tdot.on{box-shadow:0 0 0 3px var(--s1),0 0 0 5px var(--c)}
+
+/* option lists (choose menus): even, big, stacked */
+.btns.list{flex-direction:column;gap:8px;margin-top:12px}
+.btns.list .btn{flex:none;width:100%;height:54px;min-height:54px;border-radius:14px;font-size:16px;font-weight:600;padding:0 16px;display:flex;align-items:center;justify-content:center}
+.btns.list .btn.pri{background:var(--fg);color:#111}
+.btns.list .btn.cxl{margin-top:6px;background:transparent;box-shadow:inset 0 0 0 1px var(--line2);color:var(--fg2)}
+
+/* no text selection on long-press (inputs stay editable) */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable],[contenteditable] *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
