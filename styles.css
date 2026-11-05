@@ -16,7 +16,8 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .tnum{font-variant-numeric:tabular-nums}
 
 /* top bar */
-.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:2px;padding:calc(6px + var(--sat)) 6px 6px;background:rgba(18,18,18,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.chrome{position:sticky;top:0;z-index:6;background:rgba(18,18,18,.96);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;gap:2px;padding:2px 6px 6px;background:transparent}
 .ib{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:var(--fg2)}
 .ib:active{background:var(--s2)}
 .date{height:44px;padding:0 6px;border-radius:12px;font-weight:600;font-size:17px;white-space:nowrap}
@@ -202,3 +203,15 @@ input[type=range]{width:100%;accent-color:var(--ac);height:32px}
 .it.col .btn{flex:none;width:100%}
 .it.col .row2 .btn{flex:1;width:auto}
 .card .btn:not(.pri):not(.acc){background:var(--s3)}
+
+/* subject tabs */
+.subs{display:flex;gap:6px;padding:calc(8px + var(--sat)) 10px 4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;background:transparent}
+.subs::-webkit-scrollbar{display:none}
+.stab{flex:none;height:36px;padding:0 14px;border-radius:99px;background:var(--s2);color:var(--fg2);font-size:14px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stab.on{background:var(--ac-dim);color:var(--ac)}
+.stab:active{transform:scale(.97)}
+.stab.add{width:36px;padding:0;display:grid;place-items:center;color:var(--fg3)}
+.stab.add svg{width:18px;height:18px}
+.stab.add:active{color:var(--ac)}
+.fldin{width:100%;height:52px;border-radius:14px;background:var(--s2);border:1px solid var(--line2);font-size:17px;font-weight:600;padding:0 14px;outline:0}
+.fldin:focus{border-color:var(--ac)}

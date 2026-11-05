@@ -1,7 +1,7 @@
 /* Study Log: hours, focus blocks (5 min each) and a goal. Everything stays on this phone (localStorage). */
 'use strict';
 const APP_NAME = 'Study Log';          // the one place to rename the app (also update manifest.webmanifest)
-const KEY = 'studylog.v1', SCHEMA = 1, VERSION = '1.10';
+const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.12';
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -19,12 +19,18 @@ const ICON = {
   pause: '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="3"/></svg>',
   again: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
 };
 
 /* ---------------- data ---------------- */
 const DEF = { timerMin: 5, sound: 'chime', volume: 0.6, vibrate: true, autoMark: true, hideNums: false, timerBar: true,
   snap: true, h24: false, dayStart: 4, goal: 1000, goalMode: 'all', offset: 0, remind: false, remindAt: '12:00', remindMonthly: true };
-const fresh = () => ({ v: SCHEMA, setup: false, settings: { ...DEF }, rows: [], timer: { state: 'idle', dur: 5 * 60000, endAt: 0, left: 0, doneAt: 0, mark: null }, remindSkip: '' });
+const freshTimer = () => ({ state: 'idle', dur: 5 * 60000, endAt: 0, left: 0, doneAt: 0, mark: null });
+function freshSubject(name = 'Physics') {
+  return { id: uid(), name: String(name || 'Subject').trim() || 'Subject', archived: false, setup: false,
+    settings: { ...DEF }, rows: [], timer: freshTimer(), remindSkip: '', lastExportM: '', remindNotified: '', pend: null };
+}
+const freshStore = () => { const s = freshSubject('Physics'); return { v: SCHEMA, activeId: s.id, subjects: [s] }; };
 const isKey = k => typeof k === 'string' && /^\d{4}-\d\d-\d\d$/.test(k);
 function normRow(r) {
   if (!r || !isKey(r.date) || !Number.isFinite(+r.start) || !Number.isFinite(+r.end)) return null;
@@ -32,18 +38,47 @@ function normRow(r) {
   if (end <= start || end - start > 1440) return null;
   return { id: String(r.id || uid()), date: r.date, start, end, text: String(r.text || ''), blocks: Math.max(0, Math.round(+r.blocks || 0)), ts: +r.ts || Date.now() };
 }
-function migrate(d) {
-  const f = fresh(); if (!d || typeof d !== 'object') return f;
-  // future schema changes go here: if (d.v < 2) { ... }
-  const out = { ...f, ...d, v: SCHEMA, settings: { ...f.settings, ...(d.settings || {}) }, timer: { ...f.timer, ...(d.timer || {}) } };
-  if (!out.settings.remindMonthly) { out.settings.remindMonthly = true; out.settings.remindAt = '12:00'; out.remindSkip = ''; }
-  out.rows = (Array.isArray(d.rows) ? d.rows : []).map(normRow).filter(Boolean);
+function normSubject(raw, fallbackName = 'Subject') {
+  const f = freshSubject(fallbackName);
+  if (!raw || typeof raw !== 'object') return f;
+  const out = { ...f, ...raw, id: String(raw.id || f.id), name: String(raw.name || fallbackName).trim() || fallbackName,
+    archived: !!raw.archived, setup: !!raw.setup,
+    settings: { ...f.settings, ...(raw.settings || {}) }, timer: { ...f.timer, ...(raw.timer || {}) } };
+  if (!out.settings.remindMonthly) { out.settings.remindMonthly = true; out.settings.remindAt = '12:00'; out.remindSkip = out.remindSkip || ''; }
+  out.rows = (Array.isArray(raw.rows) ? raw.rows : []).map(normRow).filter(Boolean);
+  if (out.timer.state === 'running' && !Number.isFinite(+out.timer.endAt)) out.timer.state = 'idle';
   return out;
 }
+function migrate(d) {
+  if (!d || typeof d !== 'object') return freshStore();
+  // v1 (no subjects): wrap the whole log into the first subject, named Physics
+  if (!Array.isArray(d.subjects)) {
+    const sub = normSubject({
+      id: uid(), name: 'Physics', archived: false, setup: !!d.setup,
+      settings: d.settings, rows: d.rows, timer: d.timer,
+      remindSkip: d.remindSkip || '', lastExportM: d.lastExportM || '', remindNotified: d.remindNotified || '', pend: d.pend || null,
+    }, 'Physics');
+    return { v: SCHEMA, activeId: sub.id, subjects: [sub] };
+  }
+  const subjects = d.subjects.map((s, i) => normSubject(s, i === 0 ? 'Physics' : 'Subject'));
+  if (!subjects.length) return freshStore();
+  let activeId = String(d.activeId || '');
+  if (!subjects.some(s => s.id === activeId && !s.archived)) {
+    activeId = (subjects.find(s => !s.archived) || subjects[0]).id;
+  }
+  return { v: SCHEMA, activeId, subjects };
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-let D; try { D = migrate(JSON.parse(localStorage.getItem(KEY))); } catch { D = fresh(); }
+let _raw = null, STORE;
+try { _raw = JSON.parse(localStorage.getItem(KEY)); STORE = migrate(_raw); } catch { STORE = freshStore(); }
+let D = STORE.subjects.find(s => s.id === STORE.activeId) || STORE.subjects[0];
 const S = () => D.settings;
-function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch { toast('Could not save. Phone storage may be full.'); } }
+const subjectName = () => D?.name || 'Subject';
+const liveSubjects = () => STORE.subjects.filter(s => !s.archived);
+const fileSlug = s => String(s || 'subject').trim().replace(/[^\w\-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'subject';
+function save() { try { localStorage.setItem(KEY, JSON.stringify(STORE)); } catch { toast('Could not save. Phone storage may be full.'); } }
+// write the upgraded shape back once (v1 -> subjects) so the next load is already v2
+if (!_raw || _raw.v !== SCHEMA || !Array.isArray(_raw.subjects)) save();
 try { navigator.storage?.persist?.(); } catch {}
 
 /* ---------------- dates & times ---------------- */
@@ -68,6 +103,110 @@ function overlapsOf(r, list) { return (list || rowsOf(r.date)).filter(o => o !==
 
 /* ---------------- view state ---------------- */
 let view = todayKey();
+
+/* ---------------- subjects ---------------- */
+function bindActive() {
+  D = STORE.subjects.find(s => s.id === STORE.activeId) || liveSubjects()[0] || STORE.subjects[0];
+  if (D && STORE.activeId !== D.id) STORE.activeId = D.id;
+}
+function switchSubject(id, { keepDay } = {}) {
+  if (!id || id === STORE.activeId) return;
+  const next = STORE.subjects.find(s => s.id === id && !s.archived);
+  if (!next) return;
+  clearTimeout(endT); cancelNotif('timer');
+  STORE.activeId = id; bindActive();
+  if (!keepDay) view = todayKey();
+  lastPaint = ''; lastToday = todayKey();
+  if (T().state === 'running') schedule();
+  save(); render();
+}
+function renderSubjects() {
+  const bar = $('#subs'); if (!bar) return;
+  const live = liveSubjects(), act = document.activeElement;
+  const keep = act?.classList.contains('stab') ? act.dataset.id : null;
+  bar.innerHTML = '';
+  live.forEach(s => {
+    const b = el('button', { class: 'stab' + (s.id === D.id ? ' on' : ''), 'data-id': s.id, type: 'button',
+      'aria-pressed': s.id === D.id ? 'true' : 'false',
+      onclick: () => { if (s.id === D.id) manageSubject(s); else switchSubject(s.id); } }, s.name);
+    bar.append(b);
+  });
+  bar.append(el('button', { class: 'stab add', type: 'button', 'aria-label': 'Add subject', html: ICON.plus, onclick: addSubjectSheet }));
+  const on = bar.querySelector('.stab.on');
+  if (on) requestAnimationFrame(() => on.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }));
+  if (keep) bar.querySelector(`.stab[data-id="${keep}"]`)?.focus();
+}
+function addSubjectSheet() {
+  openSheet((sh, st) => {
+    const inp = el('input', { class: 'fldin', id: 'subName', maxlength: 32, placeholder: 'e.g. Chemistry', autocomplete: 'off' });
+    const go = () => {
+      const name = inp.value.trim(); if (!name) { inp.focus(); return toast('Give it a name.'); }
+      if (liveSubjects().some(s => s.name.toLowerCase() === name.toLowerCase())) { inp.focus(); return toast('You already have a subject called that.'); }
+      st.onClose = null; closeSheet(true);
+      const s = freshSubject(name); STORE.subjects.push(s); STORE.activeId = s.id; bindActive();
+      view = todayKey(); lastPaint = ''; save(); render();
+      // new subject still needs its goal / already-done
+      firstRun();
+    };
+    sh.append(head('New subject'),
+      el('p', { class: 'note', style: 'margin-top:0' }, 'Each subject is its own log — timer, hours, goal and exports stay separate.'),
+      el('div', { class: 'fld', style: 'margin-top:12px' }, el('label', { for: 'subName' }, 'Name'), inp),
+      el('div', { class: 'btns' }, el('button', { class: 'btn', onclick: () => closeSheet() }, 'Cancel'),
+        el('button', { class: 'btn pri', id: 'subCreate', onclick: go }, 'Create')));
+    requestAnimationFrame(() => inp.focus());
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  });
+}
+function manageSubject(s) {
+  openSheet((sh, st) => {
+    const inp = el('input', { class: 'fldin', id: 'renName', maxlength: 32, value: s.name, autocomplete: 'off' });
+    const saveName = () => {
+      const name = inp.value.trim(); if (!name) return toast("Name can't be empty.");
+      if (STORE.subjects.some(x => x.id !== s.id && !x.archived && x.name.toLowerCase() === name.toLowerCase())) return toast('You already have a subject called that.');
+      s.name = name; save(); st.onClose = null; closeSheet();
+    };
+    const only = liveSubjects().length <= 1;
+    sh.append(head(s.name),
+      el('div', { class: 'fld', style: 'margin-top:4px' }, el('label', { for: 'renName' }, 'Rename'), inp),
+      el('div', { class: 'btns' }, el('button', { class: 'btn pri', onclick: saveName }, 'Save name')),
+      el('div', { class: 'btns', style: 'flex-direction:column;margin-top:10px' },
+        el('button', { class: 'btn', disabled: only || undefined, onclick: async () => {
+          if (only) return toast('Keep at least one subject.');
+          const ok = await choose('Archive ' + s.name + '?', 'It leaves the tab bar. You can restore it later from Settings.',
+            [{ label: 'Cancel', v: null }, { label: 'Archive', v: 1, cls: '' }]);
+          if (!ok) return;
+          s.archived = true;
+          if (STORE.activeId === s.id) {
+            const next = liveSubjects()[0];
+            STORE.activeId = next.id; bindActive(); view = todayKey(); lastPaint = '';
+            clearTimeout(endT); if (T().state === 'running') schedule();
+          }
+          save(); render(); toast(s.name + ' archived');
+        } }, only ? 'Archive (need another subject first)' : 'Archive'),
+        el('button', { class: 'btn dng', disabled: only || undefined, onclick: async () => {
+          if (only) return toast('Keep at least one subject.');
+          const ok = await choose('Delete ' + s.name + '?', "Deletes every hour, the timer and the goal for this subject. This can't be undone.",
+            [{ label: 'Cancel', v: null }, { label: 'Delete forever', v: 1, cls: 'dng' }]);
+          if (!ok) return;
+          const i = STORE.subjects.findIndex(x => x.id === s.id); if (i < 0) return;
+          const gone = STORE.subjects.splice(i, 1)[0];
+          if (STORE.activeId === gone.id) {
+            const next = liveSubjects()[0] || STORE.subjects[0]; STORE.activeId = next.id; bindActive(); view = todayKey(); lastPaint = '';
+            clearTimeout(endT); if (T().state === 'running') schedule();
+          }
+          save(); render();
+          toast(gone.name + ' deleted', { label: 'Undo', fn: () => {
+            STORE.subjects.splice(i, 0, gone); if (!liveSubjects().some(x => x.id === STORE.activeId)) { STORE.activeId = gone.id; bindActive(); }
+            save(); render();
+          } }, 7000);
+        } }, only ? 'Delete (need another subject first)' : 'Delete forever')));
+    requestAnimationFrame(() => { inp.focus(); inp.setSelectionRange(0, inp.value.length); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveName(); } });
+  });
+}
+function restoreSubject(s) {
+  s.archived = false; save(); render(); toast(s.name + ' restored');
+}
 
 /* ---------------- toast / sheets ---------------- */
 let toastT;
@@ -112,10 +251,10 @@ function choose(title, msg, buttons) {
 /* ---------------- render: header, totals, list ---------------- */
 function render() {
   const tk = todayKey();
-  document.title = APP_NAME;
+  document.title = liveSubjects().length > 1 ? `${APP_NAME} · ${subjectName()}` : APP_NAME;
   $('#dateLabel').textContent = view === tk ? 'Today, ' + pkey(view).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : dayLabel(view);
   $('#todayBtn').hidden = view === tk;
-  renderTotals(); renderList(); paintTimer(); checkReminder();
+  renderSubjects(); renderTotals(); renderList(); paintTimer(); checkReminder();
 }
 function renderTotals() {
   const g = +S().goal || 1000, done = Math.round(goalHours() * 10) / 10, pct = Math.min(100, done / g * 100), left = Math.max(0, g - done);
@@ -413,13 +552,14 @@ function exportDocx(from, to, share) {
       rows: L.map((r, i) => [`#${fmtH(run.get(r.id))} · ${i + 1}`, fmtT(r.start), fmtT(r.end) + (r.end >= 1440 && r.start < 1440 ? ' (+1)' : ''), r.text || '—', `${Math.min(r.blocks, maxB(r))}/${maxB(r)} · ${focusOf(r)} min`]),
       total: ['Total', '', '', `${L.length} ${L.length === 1 ? 'row' : 'rows'} · ${fmtD(t.mins)}`, fmtD(t.foc)] }; });
   const g = +S().goal || 1000, done = Math.round(goalHours() * 10) / 10;
-  const model = ({ title: APP_NAME, subtitle: `${dayLabel(keys[0], true)} – ${dayLabel(keys[keys.length - 1], true)}  ·  exported ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`,
+  const slug = fileSlug(subjectName());
+  const model = ({ title: `${APP_NAME} · ${subjectName()}`, subtitle: `${dayLabel(keys[0], true)} – ${dayLabel(keys[keys.length - 1], true)}  ·  exported ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`,
     head: ['# · Day', 'Start', 'End', 'What I did', 'Focus'], days,
     summary: [`This export: ${fmtD(all.mins)} logged, ${fmtD(all.foc)} focused (${all.mins ? Math.round(all.foc / all.mins * 100) : 0}%) over ${keys.length} ${keys.length === 1 ? 'day' : 'days'}.`,
       `Goal: ${fmtH(done)} / ${fmtH(g)} h${S().goalMode === 'useful' ? ' (focus time)' : ''}, ${fmtH(Math.max(0, g - done))} h left${+S().offset ? ` (includes ${fmtH(+S().offset)} h done before the app)` : ''}.`] });
   const isMonth = from && to && from.endsWith('-01') && to.endsWith('-31') && from.slice(0, 7) === to.slice(0, 7);
   if (isMonth) { D.lastExportM = from.slice(0, 7); save(); $('#banner').hidden = true; }
-  const name = isMonth ? `study-log-${from.slice(0, 7)}.docx` : `study-log-${keys[0]}${keys.length > 1 ? '_to_' + keys[keys.length - 1] : ''}.docx`;
+  const name = isMonth ? `study-log-${slug}-${from.slice(0, 7)}.docx` : `study-log-${slug}-${keys[0]}${keys.length > 1 ? '_to_' + keys[keys.length - 1] : ''}.docx`;
   if (share) {   // Chrome on Android can't share .docx, so Share sends a PDF copy
     const pdf = makePdf(model), pn = name.replace(/\.docx$/, '.pdf'), f = new File([pdf], pn, { type: 'application/pdf' });
     let ok = false; try { ok = !!navigator.canShare?.({ files: [f] }); } catch {}
@@ -465,6 +605,19 @@ function settingsSheet() {
     const perm = 'Notification' in window ? Notification.permission : 'unsupported';
     const nb = perm === 'granted' ? el('span', { class: 'note', style: 'margin:0' }, 'On') : perm === 'denied' ? el('span', { class: 'note', style: 'margin:0' }, 'Blocked') :
       el('button', { class: 'btn', style: 'flex:none;height:40px;padding:0 14px;font-size:14px', onclick: async () => { await askNotif(); closeSheet(true); settingsSheet(); } }, 'Allow');
+    const bkIn = el('input', { type: 'file', id: 'bkIn', accept: 'application/json,.json', hidden: true, onchange: async e => {
+      const f = e.target.files?.[0]; if (!f) return;
+      try {
+        const raw = JSON.parse(await f.text());
+        if (!raw || typeof raw !== 'object' || (!Array.isArray(raw.subjects) && !Array.isArray(raw.rows))) throw 0;
+        const data = migrate(raw);
+        const ok = await choose('Restore backup?', 'This replaces everything currently in the app, all subjects included.', [
+          { label: 'Restore', v: true, cls: 'dng' }, { label: 'Cancel', v: false }]);
+        if (!ok) return;
+        STORE = data; save(); location.reload();
+      } catch { toast('Could not read that file.'); }
+      e.target.value = '';
+    } });
     sh.append(
       el('div', { class: 'sh-h' }, el('button', { class: 'ib', 'aria-label': 'Back', html: ICON.back, onclick: () => closeSheet() }), el('h2', {}, 'Settings')),
       grp('Timer',
@@ -488,6 +641,18 @@ function settingsSheet() {
           el('div', { class: 'row2', style: 'margin-top:8px' },
             el('button', { class: 'btn pri', id: 'exBtn', onclick: () => exportDocx(...exArgs()) }, 'Save'),
             el('button', { class: 'btn', id: 'shBtn', onclick: () => { try { exportDocx(...exArgs(), true); } catch (e) { toast('Share failed: ' + (e?.message || e)); } } }, 'Share')))),
+      ...(STORE.subjects.some(s => s.archived) ? [grp('Archived subjects',
+        ...STORE.subjects.filter(s => s.archived).map(s => it(s.name, `${s.rows.length} hour${s.rows.length === 1 ? '' : 's'} saved`,
+          el('button', { class: 'btn', style: 'flex:none;height:40px;padding:0 14px;font-size:14px', onclick: () => { restoreSubject(s); closeSheet(true); settingsSheet(); } }, 'Restore'))))] : []),
+      grp('Backup',
+        el('div', { class: 'it col' },
+          el('div', { class: 'row2' },
+            el('button', { class: 'btn', id: 'bkBtn', onclick: () => {
+              download(new Blob([JSON.stringify(STORE, null, 2)], { type: 'application/json' }), `studylog-backup-${todayKey()}.json`);
+              toast('Backup saved');
+            } }, 'Download backup'),
+            el('button', { class: 'btn', id: 'rsBtn', onclick: () => bkIn.click() }, 'Restore…')),
+          bkIn)),
       el('p', { class: 'note' }, `${APP_NAME} ${VERSION}. Your log is stored only on this phone. Clearing Chrome's site data deletes it, so export each month.`));
   }, 'full');
 }
@@ -539,10 +704,14 @@ function statsSheet() {
 
 /* ---------------- first run ---------------- */
 function firstRun() {
-  const g = el('input', { type: 'number', inputmode: 'numeric', min: 1, value: 1000, id: 'frGoal' });
-  const o = el('input', { type: 'number', inputmode: 'decimal', min: 0, value: 0, id: 'frDone' });
+  const g = el('input', { type: 'number', inputmode: 'numeric', min: 1, value: S().goal || 1000, id: 'frGoal' });
+  const o = el('input', { type: 'number', inputmode: 'decimal', min: 0, value: S().offset || 0, id: 'frDone' });
+  const more = liveSubjects().length > 1 || subjectName() !== 'Physics';
   const wrap = el('div', { class: 'sheet full on first', id: 'first' },
-    el('h1', {}, APP_NAME), el('p', {}, 'Log each study hour, mark the 5-minute blocks you were focused, and watch the hours add up.'),
+    el('h1', {}, more ? subjectName() : APP_NAME),
+    el('p', {}, more
+      ? `Set a goal for ${subjectName()}. Hours, timer and exports stay in this subject only.`
+      : 'Log each study hour, mark the 5-minute blocks you were focused, and watch the hours add up.'),
     el('div', { class: 'fld' }, el('label', { for: 'frGoal' }, 'Your goal (hours)'), g),
     el('div', { class: 'fld' }, el('label', { for: 'frDone' }, 'Hours already done before today'), o),
     el('div', { class: 'btns', style: 'margin-top:28px' }, el('button', { class: 'btn pri', id: 'frStart', onclick: () => {
