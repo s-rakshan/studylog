@@ -1,7 +1,7 @@
 /* Study Log: hours, focus blocks (5 min each) and a goal. Everything stays on this phone (localStorage). */
 'use strict';
 const APP_NAME = 'Study Log';          // the one place to rename the app (also update manifest.webmanifest)
-const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13.1';
+const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13.2';
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -221,23 +221,26 @@ const hideToast = () => $('#toast').classList.remove('on');
 let sheetOpen = null;
 function openSheet(build, cls = '') {
   const had = !!sheetOpen; closeSheet(true, had);   // swapping sheets reuses the same history entry
-  const scrim = el('div', { class: 'scrim', onclick: () => closeSheet() });
+  const opened = Date.now();
+  const scrim = el('div', { class: 'scrim', onclick: () => { if (Date.now() - opened > 450) closeSheet(); } });
   const sh = el('div', { class: 'sheet ' + cls, role: 'dialog' });
   if (!cls.includes('full')) sh.append(el('div', { class: 'grab' }));
   $('#sheets').append(scrim, sh);
   sheetOpen = { scrim, sh, onClose: null };
   build(sh, sheetOpen);
-  if (!had) history.pushState({ sheet: 1 }, '');  // Android back button closes the sheet
+  if (!history.state?.sheet) history.pushState({ sheet: 1 }, '');  // Android back button closes the sheet
   requestAnimationFrame(() => { scrim.classList.add('on'); sh.classList.add('on'); });
   return sh;
 }
 function closeSheet(silent, fromPop) {
   if (!sheetOpen) return; const { scrim, sh, onClose } = sheetOpen; sheetOpen = null;
   onClose?.(); scrim.remove(); sh.remove();
-  if (!fromPop && history.state?.sheet) history.back();
+  // defer: if another sheet opens right away it reuses this history entry instead of being closed by a late popstate
+  if (!fromPop) setTimeout(() => { if (!sheetOpen && history.state?.sheet) { ignorePop = true; history.back(); } }, 0);
   if (!silent) render();
 }
-addEventListener('popstate', () => { if (sheetOpen) closeSheet(false, true); });
+let ignorePop = false;
+addEventListener('popstate', () => { if (ignorePop) { ignorePop = false; return; } if (sheetOpen) closeSheet(false, true); });
 const head = (title, extra) => el('div', { class: 'sh-h' }, el('h2', {}, title), extra || null, el('button', { class: 'ib', 'aria-label': 'Close', html: ICON.x, onclick: () => closeSheet() }));
 function choose(title, msg, buttons) {
   return new Promise(res => {
