@@ -60,9 +60,10 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .del{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:var(--fg3)}
 .del svg{width:18px;height:18px}
 .del:active{background:var(--s2);color:var(--bad)}
-.did{display:block;width:100%;resize:none;border:0;outline:0;background:transparent;padding:6px 8px 8px;font-size:16px;line-height:1.4;color:var(--fg);min-height:40px;overflow:hidden}
+.did{display:block;width:100%;resize:none;border:1px solid transparent;border-radius:10px;outline:0;background:transparent;padding:6px 8px 8px;font-size:16px;line-height:1.4;color:var(--fg);min-height:40px;overflow:hidden;transition:border-color .15s,background .15s}
 .did::placeholder{color:var(--fg3)}
-.did:focus{background:var(--s2);border-radius:10px}
+.did:placeholder-shown:not(:focus){border-color:rgba(255,255,255,.2)} /* empty: light box so it reads as tappable */
+.did:focus{background:var(--s2);border-color:var(--line2)}
 .warn{color:var(--warn);font-size:12.5px;padding:0 8px 4px}
 .foc{display:flex;align-items:center;gap:8px;padding:2px 2px 0 8px}
 .cnt{font-size:14px;font-weight:650;color:var(--fg2);min-width:40px}
@@ -230,11 +231,3 @@ input[type=range]{width:100%;accent-color:var(--ac);height:32px}
 /* no text selection on long-press (inputs stay editable) */
 body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,select,[contenteditable],[contenteditable] *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
-/* keyboard Done bar (sits just above the on-screen keyboard while typing) */
-.kbbar{position:fixed;left:0;right:0;bottom:0;z-index:25;height:44px;display:flex;align-items:center;gap:8px;padding:0 6px 0 16px;background:var(--s2);border-top:1px solid var(--line2)}
-.kbbar[hidden]{display:none}
-.kbl{flex:1;min-width:0;color:var(--fg3);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kbdone{flex:none;height:36px;padding:0 14px;border-radius:10px;color:var(--ac);font-size:16px;font-weight:700}
-.kbdone:active{background:var(--ac-dim)}
-body.kbon .dock{visibility:hidden}
-body.kbon .sheet{padding-bottom:calc(60px + var(--sab))}

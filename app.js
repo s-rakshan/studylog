@@ -1,7 +1,7 @@
 /* Study Log: hours, focus blocks (5 min each) and a goal. Everything stays on this phone (localStorage). */
 'use strict';
 const APP_NAME = 'Study Log';          // the one place to rename the app (also update manifest.webmanifest)
-const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13.4';
+const KEY = 'studylog.v1', SCHEMA = 2, VERSION = '1.13.5';
 
 const $ = s => document.querySelector(s);
 const pad = n => String(n).padStart(2, '0');
@@ -352,7 +352,7 @@ function addHour() {
   D.rows.push(r); if (carry && T().state === 'done') T().mark = { id: r.id, n: carry, max: maxB(r) }; save(); view = date; render();
   const card = document.querySelector(`.row[data-id="${r.id}"]`);
   card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  if (date !== tk) timeSheet(r, 'start', true); else card?.querySelector('.did')?.focus({ preventScroll: true });
+  if (date !== tk) timeSheet(r, 'start', true); // today: only the hour is added; he taps "What did you do?" himself (no keyboard)
 }
 
 /* ---------------- time editor (bottom sheet with wheels) ---------------- */
@@ -758,60 +758,19 @@ if (new URLSearchParams(location.search).get('again') === '1') { history.replace
 setInterval(tick, 250);
 
 /* ---------------- keyboard Done ----------------
-   Every typing field gets a "Done" key on the phone keyboard (enterkeyhint) and Enter closes the keyboard.
-   On touch phones a slim bar with Done sits just above the keyboard while a field is focused. */
+   Every typing field gets a "Done" key on the phone keyboard (enterkeyhint) and Enter closes the keyboard. */
 (() => {
   const TYPING = 'textarea, input:not([type]), input[type=text], input[type=number], input[type=search], input[type=email], input[type=tel], input[type=url]';
   const isTyping = n => n?.matches?.(TYPING) && !n.readOnly && !n.disabled;
-  const multi = n => n.dataset?.multiline != null; // free-form notes: Enter is a new line, Done bar still closes
+  const multi = n => n.dataset?.multiline != null; // free-form notes: Enter is a new line
   const hint = n => { if (n.matches?.(TYPING) && !n.hasAttribute('enterkeyhint') && !multi(n)) n.setAttribute('enterkeyhint', 'done'); };
   const tag = root => { if (root.nodeType !== 1) return; hint(root); root.querySelectorAll?.(TYPING).forEach(hint); };
   tag(document.body);
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(tag))).observe(document.body, { childList: true, subtree: true });
-
   // Enter / Done key on the keyboard: just close it (fields with their own Enter handling run first and win)
   document.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing || e.shiftKey) return;
     const t = e.target; if (!isTyping(t) || multi(t)) return;
     e.preventDefault(); t.blur();
   });
-
-  const bar = el('div', { class: 'kbbar', id: 'kbBar', hidden: true },
-    el('span', { class: 'kbl' }),
-    el('button', { class: 'kbdone', type: 'button', id: 'kbDone' }, 'Done'));
-  document.body.append(bar);
-  const btn = bar.querySelector('.kbdone'), lbl = bar.querySelector('.kbl');
-  btn.addEventListener('pointerdown', e => e.preventDefault()); // keep focus until the tap lands
-  btn.addEventListener('mousedown', e => e.preventDefault());
-  btn.addEventListener('click', () => { const a = document.activeElement; if (isTyping(a)) a.blur(); hide(); });
-
-  const vv = window.visualViewport;
-  const coarse = matchMedia('(pointer: coarse)');
-  let baseH = innerHeight, cur = null, sawKb = false;
-  const shrunk = () => Math.min(innerHeight, vv ? vv.height : innerHeight) < baseH - 120;
-  const kbUp = () => shrunk() || (coarse.matches && !sawKb);
-  function place() {
-    if (bar.hidden) return;
-    const bottom = vv ? Math.max(0, innerHeight - (vv.offsetTop + vv.height)) : 0;
-    bar.style.bottom = bottom + 'px';
-    const r = cur?.getBoundingClientRect(), top = bar.getBoundingClientRect().top;
-    if (r && r.bottom > top - 4) cur.scrollIntoView({ block: 'center' });
-  }
-  function show(t) {
-    cur = t;
-    lbl.textContent = t.getAttribute('aria-label') || t.labels?.[0]?.textContent || t.placeholder || '';
-    if (!kbUp()) return hide();
-    bar.hidden = false; document.body.classList.add('kbon'); requestAnimationFrame(place);
-  }
-  function hide() { bar.hidden = true; document.body.classList.remove('kbon'); cur = null; sawKb = false; }
-  document.addEventListener('focusin', e => { if (isTyping(e.target)) { const keep = sawKb && !bar.hidden; show(e.target); sawKb = keep; } });
-  document.addEventListener('focusout', () => setTimeout(() => { if (!isTyping(document.activeElement)) hide(); }, 60));
-  const onVV = () => {
-    if (!document.activeElement || !isTyping(document.activeElement)) baseH = Math.max(innerHeight, vv ? vv.height : 0);
-    if (!cur) return;
-    if (shrunk()) { const c = cur; if (bar.hidden) show(c); sawKb = true; place(); }
-    else if (sawKb) { bar.hidden = true; document.body.classList.remove('kbon'); sawKb = false; } // keyboard closed with the field still focused
-    else place();
-  };
-  vv?.addEventListener('resize', onVV); vv?.addEventListener('scroll', onVV); addEventListener('resize', onVV);
 })();
